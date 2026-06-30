@@ -48,6 +48,11 @@ function vipgoci_help_print() :void {
 		"\t" . '                               some branches never get scanned. Separate branches' . PHP_EOL .
 		"\t" . '                               with commas.' . PHP_EOL .
 		"\t" . '--local-git-repo=FILE          The local git repository to use for direct access to code.' . PHP_EOL .
+		"\t" . '--local-path=DIR               Scan a local folder without GitHub integration. When set,' . PHP_EOL .
+		"\t" . '                               --repo-owner, --repo-name, --commit and --token are not' . PHP_EOL .
+		"\t" . '                               required. Results are printed as JSON to stdout.' . PHP_EOL .
+		"\t" . '                               Use --phpcs=true and/or --lint=true with the appropriate' . PHP_EOL .
+		"\t" . '                               scanner options to control what is scanned.' . PHP_EOL .
 		"\t" . '--name-to-use                  Name to use for the program in GitHub reviews and comments' . PHP_EOL .
 		"\t" . '                               to identify the bot. Default is "' . VIPGOCI_DEFAULT_NAME_TO_USE . '".' . PHP_EOL .
 		PHP_EOL .
@@ -278,6 +283,7 @@ function vipgoci_options_recognized() :array {
 		'skip-large-files-limit:',
 		'branches-ignore:',
 		'local-git-repo:',
+		'local-path:',
 		'name-to-use:',
 
 		/*
@@ -2206,21 +2212,25 @@ function vipgoci_run_init_options(
 		$options['name-to-use'] = VIPGOCI_DEFAULT_NAME_TO_USE;
 	}
 
-	// Validate args.
-	if (
-		( ! isset( $options['repo-owner'] ) ) ||
-		( empty( $options['repo-owner'] ) ) ||
-		( ! isset( $options['repo-name'] ) ) ||
-		( empty( $options['repo-name'] ) ) ||
-		( ! isset( $options['commit'] ) ) ||
-		( empty( $options['commit'] ) ) ||
-		( ! isset( $options['token'] ) ) ||
-		( empty( $options['token'] ) ) ||
-		( ! isset( $options['local-git-repo'] ) ) ||
-		( empty( $options['local-git-repo'] ) )
-	) {
-		vipgoci_help_print();
-		exit( VIPGOCI_EXIT_USAGE_ERROR );
+	$is_local_mode = isset( $options['local-path'] ) && ! empty( $options['local-path'] );
+
+	// Validate args — GitHub params required only when not in local-path mode.
+	if ( ! $is_local_mode ) {
+		if (
+			( ! isset( $options['repo-owner'] ) ) ||
+			( empty( $options['repo-owner'] ) ) ||
+			( ! isset( $options['repo-name'] ) ) ||
+			( empty( $options['repo-name'] ) ) ||
+			( ! isset( $options['commit'] ) ) ||
+			( empty( $options['commit'] ) ) ||
+			( ! isset( $options['token'] ) ) ||
+			( empty( $options['token'] ) ) ||
+			( ! isset( $options['local-git-repo'] ) ) ||
+			( empty( $options['local-git-repo'] ) )
+		) {
+			vipgoci_help_print();
+			exit( VIPGOCI_EXIT_USAGE_ERROR );
+		}
 	}
 
 	// Set debug option.
@@ -2229,8 +2239,10 @@ function vipgoci_run_init_options(
 	// Set options relating to maximum execution time.
 	vipgoci_run_init_options_max_exec_time( $options );
 
-	// Ensure that the GitHub token is valid.
-	vipgoci_run_init_github_token_option( $options );
+	// Ensure that the GitHub token is valid — skipped in local-path mode.
+	if ( ! $is_local_mode ) {
+		vipgoci_run_init_github_token_option( $options );
+	}
 
 	// Set options relating to PHP linting.
 	vipgoci_run_init_options_lint( $options );
@@ -2247,8 +2259,10 @@ function vipgoci_run_init_options(
 	// Process autoapprove options.
 	vipgoci_run_init_options_autoapprove( $options );
 
-	// Set git repository options.
-	vipgoci_run_init_options_git_repo( $options );
+	// Set git repository options — skipped in local-path mode.
+	if ( ! $is_local_mode ) {
+		vipgoci_run_init_options_git_repo( $options );
+	}
 
 	// Set options relating to skipping large files.
 	vipgoci_run_init_options_skip_large_files( $options );
@@ -2272,9 +2286,12 @@ function vipgoci_run_init_options(
 	vipgoci_run_init_options_output( $options );
 
 	/*
-	 * Handle --repo-options and related parameters.
+	 * Handle --repo-options and related parameters — skipped in local-path mode
+	 * as there is no GitHub repository to read options from.
 	 */
-	vipgoci_run_init_options_repo_options( $options );
+	if ( ! $is_local_mode ) {
+		vipgoci_run_init_options_repo_options( $options );
+	}
 
 	if (
 		( false === $options['lint'] ) &&
@@ -2289,12 +2306,12 @@ function vipgoci_run_init_options(
 	}
 
 	/*
-	 * Folders to skip from PHPCS or PHP Linting
-	 * can be read from a config-file in the
-	 * repository. Read this here and set in
-	 * options.
+	 * Folders to skip from PHPCS or PHP Linting can be read from a
+	 * config-file in the repository. Skipped in local-path mode.
 	 */
-	vipgoci_options_read_repo_skip_files( $options );
+	if ( ! $is_local_mode ) {
+		vipgoci_options_read_repo_skip_files( $options );
+	}
 
 	/*
 	 * Register shutdown function.
@@ -3296,6 +3313,11 @@ function vipgoci_run() :int {
 
 	// Reduce memory usage as possible.
 	gc_collect_cycles();
+
+	// Local-path mode: scan a local folder, print JSON results, and exit.
+	if ( ! empty( $options['local-path'] ) ) {
+		return vipgoci_local_path_scan( $options );
+	}
 
 	// Run scans.
 	vipgoci_run_scan( $options, $results, $prs_implicated, $startup_time );

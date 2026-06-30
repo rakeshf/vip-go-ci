@@ -23,6 +23,7 @@ require_once __DIR__ . '/git-repo.php';
 require_once __DIR__ . '/http-functions.php';
 require_once __DIR__ . '/lint-reports.php';
 require_once __DIR__ . '/lint-scan.php';
+require_once __DIR__ . '/local-scan.php';
 require_once __DIR__ . '/log.php';
 require_once __DIR__ . '/main.php';
 require_once __DIR__ . '/misc.php';

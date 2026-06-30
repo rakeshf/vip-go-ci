@@ -70,7 +70,7 @@ export VIP_GO_SVG_SANITIZER_SHA1SUM="558f16dcff6adc4637c1d0287cc6f95fe9ab2ece"
 
 export TMP_LOCK_FILE="$HOME/.vip-go-ci-tools-init.lck"
 
-function sha1sum_check() {
+sha1sum_check() {
 	FILENAME=$1
 	CORRECT_HASH=$2
 
@@ -84,7 +84,7 @@ function sha1sum_check() {
 	return 0
 }
 
-function gh_fetch_and_verify() {
+gh_fetch_and_verify() {
 	GITHUB_OWNER_AND_REPO=$1
 	VERSION_TO_FETCH=$2
 	VERSION_INDICATOR_FILE=$3
@@ -94,14 +94,13 @@ function gh_fetch_and_verify() {
 
 	TMP_FOR_ARCHIVE=`mktemp -d /tmp/vip-go-ci-tools-archive-XXXXXX`
 
-	( pushd $TMP_FOR_ARCHIVE && \
+	( cd "$TMP_FOR_ARCHIVE" && \
 	wget -O "archive.tar.gz" "https://github.com/$GITHUB_OWNER_AND_REPO/archive/$VERSION_TO_FETCH.tar.gz" && \
 	sha1sum_check "archive.tar.gz" "$CORRECT_HASH" && \
 	tar -zxf "archive.tar.gz" && \
 	mv $FILES_TO_MOVE $DESTINATION_DIR && \
 	touch $VERSION_INDICATOR_FILE && \
 	rm -rf $TMP_FOR_ARCHIVE && \
-	popd && \
 	echo "$0: Fetched & verified for $GITHUB_OWNER_AND_REPO" && \
 	return 0 ) \
 	|| \
@@ -111,7 +110,7 @@ function gh_fetch_and_verify() {
 }
 
 # Put lock file in place.
-function lock_place() {
+lock_place() {
 	# Get lock, if that fails, just exit
 	if [ -f "$TMP_LOCK_FILE" ] ; then
 		echo "$0: Lock in place already, not doing anything."
@@ -125,7 +124,7 @@ function lock_place() {
 	# on the same system. Should not happen often.
 	sleep 1
 
-	if [ "$$" == "`cat \"$TMP_LOCK_FILE\"`" ] ; then
+	if [ "$$" = "`cat \"$TMP_LOCK_FILE\"`" ] ; then
 		echo "$0: Acquired lock ($TMP_LOCK_FILE)"
 	else
 		echo "$0: Someone else got the lock before us. Bailing out"
@@ -134,9 +133,9 @@ function lock_place() {
 }
 
 # Remove lock file, but only if we acquired it.
-function lock_remove() {
+lock_remove() {
 	if [ -f "$TMP_LOCK_FILE" ] ; then
-		if [ "$$" == "`cat \"$TMP_LOCK_FILE\"`" ] ; then
+		if [ "$$" = "`cat \"$TMP_LOCK_FILE\"`" ] ; then
 			echo "$0: Removed lock"
 			rm -f "$TMP_LOCK_FILE"
 		else
@@ -153,7 +152,7 @@ lock_place
 #
 # Exit if running as root
 #
-if [ "$USERNAME" == "root" ] ; then
+if [ "$USERNAME" = "root" ] ; then
 	echo "$0: Will not run as root, exiting"
 	lock_remove
 	exit 1
@@ -185,7 +184,7 @@ if [ -f ~/vip-go-ci-tools/vip-go-ci/latest-release.php ] ||
 	export VIP_GO_CI_VER=`php ~/vip-go-ci-tools/vip-go-ci/latest-release.php`
 fi
 
-if [ "$VIP_GO_CI_VER" == "" ] ; then
+if [ "$VIP_GO_CI_VER" = "" ] ; then
 	# latest-release.php is not available, fetch it
 	# and then fetch the latest release number of vip-go-ci
 	TMP_FILE=`mktemp /tmp/vip-go-ci-latest-release-XXXXX.php`
@@ -199,7 +198,7 @@ if [ "$VIP_GO_CI_VER" == "" ] ; then
 fi
 
 # The release number is not available at all, abort
-if [ "$VIP_GO_CI_VER" == "" ] ; then
+if [ "$VIP_GO_CI_VER" = "" ] ; then
 	echo "$0: Could not determine latest release of vip-go-ci -- aborting";
 	lock_remove
 	exit 1
