@@ -11,7 +11,7 @@
 declare(strict_types=1);
 
 /**
- * Scan a local folder for PHP lint and PHPCS issues.
+ * Scan a local folder for PHP lint, PHPCS, and SVG issues.
  * Outputs results as JSON to stdout and optionally to a file via --output.
  *
  * @param array $options Options array.
@@ -24,9 +24,10 @@ function vipgoci_local_path_scan( array $options ): int {
 	vipgoci_log(
 		'Starting local path scan',
 		array(
-			'local-path' => $local_path,
-			'lint'       => $options['lint'],
-			'phpcs'      => $options['phpcs'],
+			'local-path'  => $local_path,
+			'lint'        => $options['lint'],
+			'phpcs'       => $options['phpcs'],
+			'svg-checks'  => $options['svg-checks'],
 		)
 	);
 
@@ -195,6 +196,98 @@ function vipgoci_local_path_scan( array $options ): int {
 						$results['stats']['warning']++;
 					}
 				}
+			}
+		}
+	}
+
+	/*
+	 * SVG scan.
+	 */
+	if ( true === $options['svg-checks'] ) {
+		$svg_files = vipgoci_scandir_git_repo(
+			$local_path,
+			true,
+			array(
+				'file_extensions' => $options['svg-file-extensions'],
+				'skip_folders'    => array(),
+			)
+		);
+
+		vipgoci_log(
+			'SVG scanning local files',
+			array( 'files_count' => count( $svg_files ) )
+		);
+
+		$disallowed_tokens = array( '<?php', '<?=' );
+
+		foreach ( $svg_files as $filename ) {
+			$file_contents = @file_get_contents( $local_path . '/' . $filename ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+
+			if ( false === $file_contents ) {
+				continue;
+			}
+
+			$temp_file = vipgoci_save_temp_file( 'vipgoci-local-svg-', 'svg', $file_contents );
+
+			/*
+			 * Initialize results structure that both the external scanner
+			 * and the token scanner write into.
+			 */
+			$svg_results = array(
+				'totals' => array( 'errors' => 0, 'warnings' => 0, 'fixable' => 0 ),
+				'files'  => array(
+					$temp_file => array( 'errors' => 0, 'messages' => array() ),
+				),
+			);
+
+			/*
+			 * Run the external SVG sanitizer if a scanner path is configured.
+			 */
+			if ( ! empty( $options['svg-scanner-path'] ) ) {
+				$scanner_raw = vipgoci_svg_do_scan_with_scanner(
+					$options['svg-scanner-path'],
+					$options['svg-php-path'],
+					$temp_file
+				);
+
+				if ( null !== $scanner_raw ) {
+					$scanner_decoded = json_decode( $scanner_raw, true );
+
+					if ( null !== $scanner_decoded ) {
+						$svg_results = $scanner_decoded;
+
+						if ( ! isset( $svg_results['files'][ $temp_file ] ) ) {
+							$svg_results['files'][ $temp_file ] = array( 'errors' => 0, 'messages' => array() );
+						}
+					}
+				}
+			}
+
+			/*
+			 * Always scan for forbidden PHP tags regardless of external scanner.
+			 */
+			vipgoci_svg_look_for_specific_tokens( $disallowed_tokens, $temp_file, $svg_results );
+
+			unlink( $temp_file );
+
+			/*
+			 * Normalize messages and collect into results.
+			 */
+			$messages = $svg_results['files'][ $temp_file ]['messages'] ?? array();
+
+			foreach ( $messages as $msg ) {
+				$results['issues'][ $filename ][] = array(
+					'type'     => 'svg',
+					'line'     => (int) ( $msg['line'] ?? 0 ),
+					'column'   => (int) ( $msg['column'] ?? 0 ),
+					'message'  => $msg['message'],
+					'source'   => $msg['source'] ?? 'VipgociInternal.SVG.DisallowedTags',
+					'level'    => 'ERROR',
+					'severity' => 5,
+					'fixable'  => false,
+				);
+
+				$results['stats']['error']++;
 			}
 		}
 	}
