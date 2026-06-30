@@ -143,12 +143,15 @@ function vipgoci_local_path_scan( array $options ): int {
 				continue;
 			}
 
-			$file_ext  = vipgoci_file_extension_get( $filename );
-			$temp_file = vipgoci_save_temp_file(
-				'vipgoci-local-phpcs-',
-				( '' !== $file_ext ) ? $file_ext : null,
-				$file_contents
-			);
+			/*
+			 * Place the file in a temp directory using its real basename so
+			 * PHPCS filename-based sniffs (e.g. WordPress.Files.FileName) see
+			 * the correct name rather than the random temp file name.
+			 */
+			$temp_dir  = rtrim( sys_get_temp_dir(), '/' ) . '/vipgoci-local-' . uniqid( '', true );
+			mkdir( $temp_dir, 0700 );
+			$temp_file = $temp_dir . '/' . basename( $filename );
+			file_put_contents( $temp_file, $file_contents );
 
 			$file_issues_str = vipgoci_phpcs_do_scan(
 				$temp_file,
@@ -161,6 +164,7 @@ function vipgoci_local_path_scan( array $options ): int {
 			);
 
 			unlink( $temp_file );
+			rmdir( $temp_dir );
 
 			if ( null === $file_issues_str ) {
 				continue;
